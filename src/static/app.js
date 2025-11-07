@@ -13,6 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // Clear loading message
       activitiesList.innerHTML = "";
 
+      // Reset activity select (keep placeholder)
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
@@ -20,14 +23,80 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // Card HTML includes a participants section with an empty <ul> to populate below
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+
+          <div class="participants">
+            <h5>Participants</h5>
+            <ul class="participants-list"></ul>
+          </div>
         `;
 
         activitiesList.appendChild(activityCard);
+
+          // Populate participants list (create li elements to avoid HTML injection)
+          const ul = activityCard.querySelector(".participants-list");
+          if (Array.isArray(details.participants) && details.participants.length > 0) {
+            details.participants.forEach((p) => {
+              const li = document.createElement("li");
+              li.className = "participant-row";
+
+              const span = document.createElement("span");
+              span.textContent = p;
+
+              const btn = document.createElement("button");
+              btn.className = "remove-btn";
+              btn.setAttribute("aria-label", `Unregister ${p} from ${name}`);
+              btn.textContent = "✖";
+
+              // Remove participant when button is clicked
+              btn.addEventListener("click", async () => {
+                try {
+                  const res = await fetch(
+                    `/activities/${encodeURIComponent(name)}/participants?email=${encodeURIComponent(p)}`,
+                    { method: "DELETE" }
+                  );
+                  const result = await res.json();
+
+                  if (res.ok) {
+                    messageDiv.textContent = result.message;
+                    messageDiv.className = "success";
+                    messageDiv.classList.remove("hidden");
+
+                    // Refresh activities to update UI
+                    await fetchActivities();
+                  } else {
+                    messageDiv.textContent = result.detail || "Failed to unregister";
+                    messageDiv.className = "error";
+                    messageDiv.classList.remove("hidden");
+                  }
+
+                  // Hide message after 3 seconds
+                  setTimeout(() => {
+                    messageDiv.classList.add("hidden");
+                  }, 3000);
+                } catch (error) {
+                  messageDiv.textContent = "Failed to unregister. Please try again.";
+                  messageDiv.className = "error";
+                  messageDiv.classList.remove("hidden");
+                  console.error("Error unregistering:", error);
+                }
+              });
+
+              li.appendChild(span);
+              li.appendChild(btn);
+              ul.appendChild(li);
+            });
+          } else {
+            const li = document.createElement("li");
+            li.className = "no-participants";
+            li.textContent = "No participants yet — be the first!";
+            ul.appendChild(li);
+          }
 
         // Add option to select dropdown
         const option = document.createElement("option");
@@ -62,6 +131,9 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+
+        // Refresh activities so the new participant and availability appear immediately
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";

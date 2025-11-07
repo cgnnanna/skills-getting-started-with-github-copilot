@@ -38,6 +38,42 @@ activities = {
         "schedule": "Mondays, Wednesdays, Fridays, 2:00 PM - 3:00 PM",
         "max_participants": 30,
         "participants": ["john@mergington.edu", "olivia@mergington.edu"]
+    },
+    "Soccer Team": {
+        "description": "Competitive soccer team practices and matches",
+        "schedule": "Monday, Wednesday, Friday, 4:00 PM - 5:30 PM",
+        "max_participants": 22,
+        "participants": ["ryan@mergington.edu", "maria@mergington.edu"]
+    },
+    "Basketball Club": {
+        "description": "Pickup games and skill development for basketball players",
+        "schedule": "Tuesdays and Thursdays, 5:00 PM - 6:30 PM",
+        "max_participants": 18,
+        "participants": ["kevin@mergington.edu", "lara@mergington.edu"]
+    },
+    "Art Club": {
+        "description": "Explore drawing, painting, and mixed media projects",
+        "schedule": "Wednesdays, 3:30 PM - 5:00 PM",
+        "max_participants": 16,
+        "participants": ["nina@mergington.edu", "alex@mergington.edu"]
+    },
+    "Drama Club": {
+        "description": "Acting workshops and production of school plays",
+        "schedule": "Mondays and Thursdays, 4:00 PM - 6:00 PM",
+        "max_participants": 25,
+        "participants": ["emma.w@mergington.edu", "sam@mergington.edu"]
+    },
+    "Debate Team": {
+        "description": "Practice public speaking, argumentation, and compete in debates",
+        "schedule": "Fridays, 4:00 PM - 5:30 PM",
+        "max_participants": 14,
+        "participants": ["oliver@mergington.edu", "chloe@mergington.edu"]
+    },
+    "Science Club": {
+        "description": "Hands-on experiments, science fairs, and research projects",
+        "schedule": "Thursdays, 3:30 PM - 5:00 PM",
+        "max_participants": 20,
+        "participants": ["liam@mergington.edu", "ava@mergington.edu"]
     }
 }
 
@@ -55,6 +91,8 @@ def get_activities():
 @app.post("/activities/{activity_name}/signup")
 def signup_for_activity(activity_name: str, email: str):
     """Sign up a student for an activity"""
+    # Normalize email to avoid case-sensitivity issues and trim whitespace
+    email = email.strip().lower()
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -62,6 +100,40 @@ def signup_for_activity(activity_name: str, email: str):
     # Get the specific activity
     activity = activities[activity_name]
 
-    # Add student
-    activity["participants"].append(email)
+    # Check capacity
+    if len(activity["participants"]) >= activity.get("max_participants", float("inf")):
+        raise HTTPException(status_code=400, detail="Activity is full")
+
+    # Validate student is not already signed up (case-insensitive)
+    if email in [p.lower() for p in activity.get("participants", [])]:
+        raise HTTPException(status_code=400, detail="Student already signed up for this activity")
+
+    # Add student (store normalized email)
+    activity.setdefault("participants", []).append(email)
     return {"message": f"Signed up {email} for {activity_name}"}
+
+
+@app.delete("/activities/{activity_name}/participants")
+def unregister_participant(activity_name: str, email: str):
+    """Unregister a student from an activity"""
+    # Validate activity exists
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    activity = activities[activity_name]
+
+    # Normalize email for comparison
+    email = email.strip().lower()
+
+    # Validate student is signed up (compare case-insensitively)
+    normalized_list = [p.lower() for p in activity.get("participants", [])]
+    if email not in normalized_list:
+        raise HTTPException(status_code=404, detail="Participant not found in activity")
+
+    # remove the first matching participant (preserve stored case if any)
+    for i, p in enumerate(activity.get("participants", [])):
+        if p.lower() == email:
+            activity["participants"].pop(i)
+            break
+
+    return {"message": f"Unregistered {email} from {activity_name}"}
