@@ -91,6 +91,8 @@ def get_activities():
 @app.post("/activities/{activity_name}/signup")
 def signup_for_activity(activity_name: str, email: str):
     """Sign up a student for an activity"""
+    # Normalize email to avoid case-sensitivity issues and trim whitespace
+    email = email.strip().lower()
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -98,9 +100,40 @@ def signup_for_activity(activity_name: str, email: str):
     # Get the specific activity
     activity = activities[activity_name]
 
-    # Validate student is not already signed up
-    if email in activity["participants"]:
-        raise HTTPException(status_code=400, detail="Student already signed up for this activity") 
-    # Add student
-    activity["participants"].append(email)
+    # Check capacity
+    if len(activity["participants"]) >= activity.get("max_participants", float("inf")):
+        raise HTTPException(status_code=400, detail="Activity is full")
+
+    # Validate student is not already signed up (case-insensitive)
+    if email in [p.lower() for p in activity.get("participants", [])]:
+        raise HTTPException(status_code=400, detail="Student already signed up for this activity")
+
+    # Add student (store normalized email)
+    activity.setdefault("participants", []).append(email)
     return {"message": f"Signed up {email} for {activity_name}"}
+
+
+@app.delete("/activities/{activity_name}/participants")
+def unregister_participant(activity_name: str, email: str):
+    """Unregister a student from an activity"""
+    # Validate activity exists
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    activity = activities[activity_name]
+
+    # Normalize email for comparison
+    email = email.strip().lower()
+
+    # Validate student is signed up (compare case-insensitively)
+    normalized_list = [p.lower() for p in activity.get("participants", [])]
+    if email not in normalized_list:
+        raise HTTPException(status_code=404, detail="Participant not found in activity")
+
+    # remove the first matching participant (preserve stored case if any)
+    for i, p in enumerate(activity.get("participants", [])):
+        if p.lower() == email:
+            activity["participants"].pop(i)
+            break
+
+    return {"message": f"Unregistered {email} from {activity_name}"}
